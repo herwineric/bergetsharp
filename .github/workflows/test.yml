@@ -20,11 +20,5 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore dependencies
-        run: dotnet restore BergetSharp.sln
-
-      - name: Build
-        run: dotnet build BergetSharp.sln --no-restore
-
       - name: Test
-        run: dotnet test BergetSharp.sln --no-build --logger trx
+        run: dotnet test
