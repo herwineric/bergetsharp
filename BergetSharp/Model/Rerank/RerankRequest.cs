@@ -21,7 +21,7 @@ public sealed class RerankRequest
     /// A list of document objects or strings to rerank.
     /// </summary>
     [JsonPropertyName("documents")]
-    public List<object> Documents { get; set; } = new();
+    public List<string> Documents { get; set; } = new();
 
     /// <summary>
     /// The number of most relevant documents/indices to return.
