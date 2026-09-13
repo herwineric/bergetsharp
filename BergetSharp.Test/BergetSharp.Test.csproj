@@ -23,6 +23,9 @@
       <None Update="Files\sample-speech-1m.mp3">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
+      <None Update="Files\sample-bumblebee-400x300.png">
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
 </Project>
