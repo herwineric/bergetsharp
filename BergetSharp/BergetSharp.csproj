@@ -4,14 +4,43 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+
+        <!-- Package metadata -->
+        <PackageId>BergetSharp</PackageId>
+        <VersionPrefix>0.1.0</VersionPrefix>
+        <Authors>herwineric</Authors>
+        <Company>herwineric</Company>
+        <Copyright>Copyright © herwineric</Copyright>
+        <Description>An unofficial .NET client for the Berget.AI inference API. Built on the official OpenAI .NET SDK, with support for chat, embeddings, audio and rerank.</Description>
+        <Summary>An unofficial .NET client for the Berget.AI inference API.</Summary>
+        <PackageTags>berget;berget.ai;openai;llm;chat;embeddings;rerank;ai;inference</PackageTags>
+        <PackageReleaseNotes>Initial release: chat, embeddings, audio transcription and rerank support against https://api.berget.ai/v1.</PackageReleaseNotes>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/herwineric/berget-ai-csharp</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/herwineric/berget-ai-csharp.git</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+
+        <!-- Packaging -->
+        <GeneratePackageOnBuild Condition="'$(Configuration)' == 'Release'">true</GeneratePackageOnBuild>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <Deterministic>true</Deterministic>
     </PropertyGroup>
 
     <ItemGroup>
       <PackageReference Include="OpenAI" Version="2.13.0" />
+      <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+      <PackageReference Include="Microsoft.Build.Tasks.Git" Version="10.0.401" PrivateAssets="All" />
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Model\" />
+      <None Include="..\README.md" Pack="true" PackagePath="\" />
+      <None Include="..\LICENSE" Pack="true" PackagePath="\" />
     </ItemGroup>
 
 </Project>
