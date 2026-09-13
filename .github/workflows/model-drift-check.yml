@@ -22,7 +22,7 @@ jobs:
       BERGET_GA_MODELID: ${{ secrets.BERGET_GA_MODELID }}
       MODELS_FILE: BergetSharp/Model/Models.cs
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
 
       - name: Fetch live model list
         run: |
