@@ -1,0 +1,207 @@
+name: model-drift-check
+
+on:
+  schedule:
+    - cron: "0 5 * * 6" # Saturdays 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: model-drift-check
+  cancel-in-progress: false
+
+jobs:
+  check-models:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BERGET_API_KEY: ${{ secrets.BERGET_API_KEY }}
+      BERGET_GA_MODELID: ${{ secrets.BERGET_GA_MODELID }}
+      MODELS_FILE: BergetSharp/Model/Models.cs
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch live model list
+        run: |
+          set -euo pipefail
+          : "${BERGET_API_KEY:?BERGET_API_KEY secret is required}"
+
+          curl -sSf \
+            -H "Authorization: Bearer $BERGET_API_KEY" \
+            -H "Accept: application/json" \
+            https://api.berget.ai/v1/models -o models.json
+
+          jq -r '.data[].id' models.json | sort -u > live_ids.txt
+          echo "Live models ($(wc -l < live_ids.txt)):"
+          cat live_ids.txt
+
+      - name: Compare live models with Models.cs
+        id: compare
+        run: |
+          set -euo pipefail
+
+          drift=0
+          missing_list=""
+          while IFS= read -r id; do
+            if ! grep -qF "\"$id\"" "$MODELS_FILE"; then
+              echo "MISSING from Models.cs: $id"
+              missing_list+="- $id"$'\n'
+              drift=1
+            fi
+          done < live_ids.txt
+
+          removed_list=""
+          while IFS= read -r id; do
+            [ -z "$id" ] && continue
+            if ! grep -qxF "$id" live_ids.txt; then
+              echo "STALE in Models.cs: $id"
+              removed_list+="- $id"$'\n'
+              drift=1
+            fi
+          done < <(grep -oE '"[^"]*"' "$MODELS_FILE" | tr -d '"' | sort -u)
+
+          if [ "$drift" -eq 0 ]; then
+            echo "Models.cs is up to date."
+            echo "### Models.cs is up to date" >> "$GITHUB_STEP_SUMMARY"
+          else
+            if [ -n "$missing_list" ]; then
+              {
+                echo "### Model IDs missing from Models.cs"
+                echo "$missing_list"
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ -n "$removed_list" ]; then
+              {
+                echo "### Model IDs in Models.cs no longer returned by /v1/models"
+                echo "$removed_list"
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          {
+            echo "drift=$drift"
+            if [ -n "$missing_list" ]; then
+              echo 'missing_list<<MISSING_LIST_EOF'
+              printf '%s' "$missing_list"
+              echo 'MISSING_LIST_EOF'
+            fi
+            if [ -n "$removed_list" ]; then
+              echo 'removed_list<<REMOVED_LIST_EOF'
+              printf '%s' "$removed_list"
+              echo 'REMOVED_LIST_EOF'
+            fi
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Generate updated Models.cs via Berget chat
+        if: steps.compare.outputs.drift == '1'
+        run: |
+          set -euo pipefail
+          : "${BERGET_API_KEY:?BERGET_API_KEY secret is required}"
+          MODEL_ID="${BERGET_GA_MODELID:?BERGET_GA_MODELID secret is required to generate the updated file}"
+          echo "Using chat model: $MODEL_ID"
+
+          PROMPT=$(cat <<'EOF'
+          You maintain BergetSharp/Model/Models.cs, a C# file that lists every model ID of the Berget.AI inference API as string constants grouped into nested static classes.
+
+          Regenerate the file from the attached /v1/models response.
+          Rules:
+          - Output ONLY the raw C# file content, no markdown code fences and no explanations.
+          - Namespace: BergetSharp.Model. Public static class Models with nested public static classes grouped by the model_type field: text -> Chat, embedding -> Embedding, speech-to-text -> SpeechToText, rerank -> Rerank.
+          - Keep existing constant names for IDs that still exist; add constants for new IDs following the same naming style (letters, digits and underscores only); remove constants whose IDs no longer exist.
+          - Keep the XML documentation comments, updating them only where needed.
+          EOF
+          )
+
+          PAYLOAD=$(jq -n \
+            --arg model "$MODEL_ID" \
+            --arg prompt "$PROMPT" \
+            --rawfile current "$MODELS_FILE" \
+            --rawfile models models.json \
+            '{
+              model: $model,
+              messages: [{ role: "user", content: ($prompt + "\n\nCurrent Models.cs:\n\n" + $current + "\n\n/v1/models response JSON:\n\n" + $models) }]
+            }')
+
+          RESPONSE=$(curl -sSf \
+            -H "Authorization: Bearer $BERGET_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            https://api.berget.ai/v1/chat/completions)
+
+          CONTENT="$(echo "$RESPONSE" | jq -r '.choices[0].message.content' | sed '/^```/d')"
+          CONTENT="${CONTENT#"${CONTENT%%[![:space:]]*}"}"
+          printf '%s\n' "$CONTENT" > Models.generated.cs
+          echo "Generated Models.cs preview:"
+          head -n 10 Models.generated.cs
+
+      - name: Upload raw generated file
+        if: steps.compare.outputs.drift == '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Models-generated-raw
+          path: Models.generated.cs
+
+      - name: Setup .NET
+        if: steps.compare.outputs.drift == '1'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Validate generated file builds
+        if: steps.compare.outputs.drift == '1'
+        run: |
+          set -euo pipefail
+          cp Models.generated.cs "$MODELS_FILE"
+          dotnet build BergetSharp.sln
+
+      - name: Open PR with updated Models.cs
+        if: steps.compare.outputs.drift == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_TITLE: "chore: sync Models.cs with Berget /v1/models"
+          MISSING_LIST: ${{ steps.compare.outputs.missing_list }}
+          REMOVED_LIST: ${{ steps.compare.outputs.removed_list }}
+        run: |
+          set -euo pipefail
+          : "${BERGET_GA_MODELID:?BERGET_GA_MODELID secret is required}"
+
+          EXISTING="$(gh pr list --state open --json title,url | jq -r --arg t "$PR_TITLE" '.[] | select(.title == $t) | .html_url')"
+          if [ -n "$EXISTING" ]; then
+            echo "Open PR already exists, skipping: $EXISTING"
+            echo "### Open PR already exists: $EXISTING" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          BRANCH="bot/model-drift-$(date +%Y%m%d-%H%M%S)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add "$MODELS_FILE"
+          git commit -m "$PR_TITLE"
+          git push -u origin "$BRANCH"
+
+          cat > pr_body.md <<EOF
+          Syncs \`BergetSharp/Model/Models.cs\` with https://api.berget.ai/v1/models.
+
+          ### Model IDs missing from Models.cs
+          ${MISSING_LIST:-_none_}
+
+          ### Model IDs no longer present in /v1/models
+          ${REMOVED_LIST:-_none_}
+
+          Generated via Berget chat model \`${BERGET_GA_MODELID}\` and validated with \`dotnet build\`.
+          EOF
+
+          PR_URL="$(gh pr create \
+            --base "${{ github.ref_name }}" \
+            --head "$BRANCH" \
+            --title "$PR_TITLE" \
+            --body-file pr_body.md)"
+
+          {
+            echo "### PR created"
+            echo "$PR_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
