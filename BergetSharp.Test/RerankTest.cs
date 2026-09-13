@@ -6,8 +6,8 @@ namespace BergetSharp.Test;
 
 public class RerankTest
 {
-    [Fact]
-    public void Rerank_Top3_Test()
+    [Test]
+    public async Task Rerank_Top3_Test()
     {
         var credentials = new ApiKeyCredential(Environment.GetEnvironmentVariable("BERGET_API_KEY") ?? "");
         var options = new OpenAIClientOptions { Endpoint = new Uri("https://api.berget.ai/v1") };
@@ -20,6 +20,6 @@ public class RerankTest
         
         var response = rerankClient.Rerank(query, documents);
         
-        Assert.True(response.Value.Results.Count == documents.Count);
+        await Assert.That(response.Value.Results.Count == documents.Count).IsTrue();
     }
 }
