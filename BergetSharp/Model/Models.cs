@@ -13,7 +13,6 @@ public static class Models
     {
         public const string Qwen3_8_27B_Fp8 = "Qwen/Qwen3.8-27B-FP8";
         public const string MistralSmall3_2_24B_Instruct_2506 = "mistralai/Mistral-Small-3.2-24B-Instruct-2506";
-        public const string Glm5_2 = "zai-org/GLM-5.2";
         public const string Glm5_3_Flash = "zai-org/GLM-5.3-Flash";
         public const string KimiK3 = "moonshotai/Kimi-K3";
         public const string Gemma4_31B_It = "google/gemma-4-31B-it";
