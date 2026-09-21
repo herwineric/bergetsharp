@@ -1,9 +1,12 @@
 name: publish
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Git tag to publish (e.g. v1.2.3)'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -13,8 +16,25 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write # required for Trusted Publishing (OIDC -> temp NuGet API key)
+      contents: write # required to create the GitHub release
+    env:
+      BERGET_API_KEY: ${{ secrets.BERGET_API_KEY }}
+      BERGET_GA_MODELID: ${{ secrets.BERGET_GA_MODELID }}
     steps:
+      - name: Verify tag exists
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! git ls-remote --exit-code origin "refs/tags/$TAG" > /dev/null; then
+            echo "::error::Tag '$TAG' does not exist in the repository."
+            exit 1
+          fi
+
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0 # full history required to collect the commits included in the tag
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
@@ -27,13 +47,34 @@ jobs:
       - name: Pack
         run: dotnet pack BergetSharp/BergetSharp.csproj -c Release -o artifacts --no-build --no-restore -p:ContinuousIntegrationBuild=true
 
-      - name: Verify package version matches release tag
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Verify package version matches tag
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${TAG#v}"
           PKG_VERSION=$(ls artifacts/BergetSharp.*.nupkg | head -n1 | sed 's/.*BergetSharp\.\(.*\)\.nupkg/\1/')
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "::error::Tag version ($TAG_VERSION) does not match package version ($PKG_VERSION). Update VersionPrefix in BergetSharp.csproj."
+            exit 1
+          fi
+
+      - name: Collect commits included in the tag
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="$PREV_TAG..$TAG"
+            echo "Commits since previous tag ($RANGE):"
+          else
+            RANGE="$TAG"
+            echo "No previous tag found, collecting all commits reachable from $TAG:"
+          fi
+          git log --no-decorate --pretty=format:'%h %s' "$RANGE" > commits.txt
+          cat commits.txt
+          if [ ! -s commits.txt ]; then
+            echo "::error::No commits found for range $RANGE."
             exit 1
           fi
 
@@ -49,3 +90,60 @@ jobs:
         run: |
           dotnet nuget push artifacts/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
           dotnet nuget push artifacts/*.snupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Generate release notes via Berget chat
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          : "${BERGET_API_KEY:?BERGET_API_KEY secret is required}"
+          MODEL_ID="${BERGET_GA_MODELID:?BERGET_GA_MODELID secret is required}"
+          echo "Using chat model: $MODEL_ID"
+
+          PROMPT=$(cat <<'EOF'
+          You write release notes for BergetSharp, an unofficial .NET client for the Berget.AI inference API.
+
+          Write GitHub-flavored markdown release notes for the release below:
+          - Start with a short summary paragraph (2-3 sentences) describing the release at a high level.
+          - Follow with a bulletpoint list of what has been done, one bullet per change, referencing the short commit SHA of the commit(s) each bullet covers, e.g. "- Add rerank client (bfda3ff)".
+          - Base the notes ONLY on the given commits; do not invent changes.
+          - Output ONLY the markdown, no code fences and no explanations.
+          EOF
+          )
+
+          PAYLOAD=$(jq -n \
+            --arg model "$MODEL_ID" \
+            --arg prompt "$PROMPT" \
+            --arg tag "$TAG" \
+            --rawfile commits commits.txt \
+            '{
+              model: $model,
+              messages: [{ role: "user", content: ($prompt + "\n\nRelease tag: " + $tag + "\n\nCommits included in this release:\n" + $commits) }]
+            }')
+
+          RESPONSE=$(curl -sSf \
+            -H "Authorization: Bearer $BERGET_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            https://api.berget.ai/v1/chat/completions)
+
+          CONTENT="$(echo "$RESPONSE" | jq -r '.choices[0].message.content' | sed '/^```/d')"
+          CONTENT="${CONTENT#"${CONTENT%%[![:space:]]*}"}"
+          if [ -z "$CONTENT" ]; then
+            echo "::error::Berget chat returned empty release notes."
+            exit 1
+          fi
+          printf '%s\n' "$CONTENT" > release-notes.md
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" --notes-file release-notes.md --title "$TAG"
+          fi
+          echo "### Release notes for $TAG" >> "$GITHUB_STEP_SUMMARY"
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"

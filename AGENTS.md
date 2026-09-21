@@ -8,7 +8,7 @@ Unofficial .NET client for the Berget.AI inference API. Two projects in the solu
 - All tests: `dotnet test BergetSharp.sln`
 - Single test class: `dotnet test BergetSharp.sln -- --treenode-filter "/*/*/RerankTest/*"` (MTP runner via `global.json`; plain `--filter` matches nothing)
 - Targets `net10.0`; requires a .NET 10 SDK (older SDKs fail restore).
-- CI: `.github/workflows/test.yml` (build + test on push/PR to main, needs `BERGET_API_KEY` secret), `.github/workflows/publish.yml` (packs and pushes to nuget.org via Trusted Publishing on GitHub Release), `.github/dependabot.yml` (weekly NuGet + GitHub Actions updates). Verification = build + test.
+- CI: `.github/workflows/test.yml` (build + test on push/PR to main, needs `BERGET_API_KEY` secret), `.github/workflows/publish.yml` (manual `workflow_dispatch` with a git tag input; packs and pushes to nuget.org via Trusted Publishing, then creates the GitHub release with notes generated from the tag's commits via the Berget chat API, needs `BERGET_API_KEY` + `BERGET_GA_MODELID` secrets), `.github/dependabot.yml` (weekly NuGet + GitHub Actions updates). Verification = build + test.
 
 ## Packaging
 
