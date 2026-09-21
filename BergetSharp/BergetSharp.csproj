@@ -8,7 +8,7 @@
 
         <!-- Package metadata -->
         <PackageId>BergetSharp</PackageId>
-        <VersionPrefix>0.1.0</VersionPrefix>
+        <VersionPrefix>0.2.0</VersionPrefix>
         <Authors>herwineric</Authors>
         <Company>herwineric</Company>
         <Copyright>Copyright © herwineric</Copyright>
