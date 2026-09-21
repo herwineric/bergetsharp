@@ -1,14 +1,19 @@
 # AGENTS.md
 
-Unofficial .NET client for the Berget.AI inference API. Two projects in the solution: `BergetSharp` (client library) and `BergetSharp.Test` (xUnit).
+Unofficial .NET client for the Berget.AI inference API. Two projects in the solution: `BergetSharp` (client library) and `BergetSharp.Test` (TUnit).
 
 ## Commands
 
 - Build: `dotnet build BergetSharp.sln`
 - All tests: `dotnet test BergetSharp.sln`
-- Single test: `dotnet test BergetSharp.sln --filter BergetSharp.Test.RerankTest`
+- Single test class: `dotnet test BergetSharp.sln -- --treenode-filter "/*/*/RerankTest/*"` (MTP runner via `global.json`; plain `--filter` matches nothing)
 - Targets `net10.0`; requires a .NET 10 SDK (older SDKs fail restore).
-- No CI, lint, or formatting config exists. Verification = build + test.
+- CI: `.github/workflows/test.yml` (build + test on push/PR to main, needs `BERGET_API_KEY` secret), `.github/workflows/publish.yml` (packs and pushes to nuget.org via Trusted Publishing on GitHub Release), `.github/dependabot.yml` (weekly NuGet + GitHub Actions updates). Verification = build + test.
+
+## Packaging
+
+- `BergetSharp` packs to NuGet (`PackageId: BergetSharp`); bump `VersionPrefix` in `BergetSharp.csproj` and create a release tagged `v<version>` to publish.
+- `GeneratePackageOnBuild` is set, so `dotnet pack` skips its implicit build — always `dotnet build` first (CI does; see NU5026 note in `publish.yml`).
 
 ## Tests hit the live API
 

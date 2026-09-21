@@ -54,14 +54,31 @@ jobs:
           done < live_ids.txt
 
           removed_list=""
+          # Extract model IDs from const declarations, skipping constants marked
+          # with [Obsolete] so deprecated IDs no longer count as stale drift.
           while IFS= read -r id; do
             [ -z "$id" ] && continue
             if ! grep -qxF "$id" live_ids.txt; then
-              echo "STALE in Models.cs: $id"
+              echo "STALE in Models.cs (will be marked [Obsolete]): $id"
               removed_list+="- $id"$'\n'
               drift=1
             fi
-          done < <(grep -oE '"[^"]*"' "$MODELS_FILE" | tr -d '"' | sort -u)
+          done < <(awk '
+            { lines[NR] = $0 }
+            /public const string/ && /"[^"]*"/ {
+              obsolete = 0
+              for (j = NR - 1; j >= 1; j--) {
+                if (lines[j] ~ /\[Obsolete/) { obsolete = 1; break }
+                if (lines[j] ~ /;/ || lines[j] ~ /^[[:space:]]*[{})]/) break
+              }
+              if (!obsolete) {
+                id = $0
+                sub(/^[^"]*"/, "", id)
+                sub(/".*$/, "", id)
+                print id
+              }
+            }
+          ' "$MODELS_FILE" | sort -u)
 
           if [ "$drift" -eq 0 ]; then
             echo "Models.cs is up to date."
@@ -110,7 +127,9 @@ jobs:
           Rules:
           - Output ONLY the raw C# file content, no markdown code fences and no explanations.
           - Namespace: BergetSharp.Model. Public static class Models with nested public static classes grouped by the model_type field: text -> Chat, embedding -> Embedding, speech-to-text -> SpeechToText, rerank -> Rerank.
-          - Keep existing constant names for IDs that still exist; add constants for new IDs following the same naming style (letters, digits and underscores only); remove constants whose IDs no longer exist.
+          - Keep existing constant names for IDs that still exist; add constants for new IDs following the same naming style (letters, digits and underscores only).
+          - Never remove existing constants. If an ID is no longer part of the /v1/models response, keep the constant and mark it deprecated by placing [Obsolete("Model ID is no longer returned by the Berget /v1/models endpoint.")] directly above the constant declaration. Do not change the constant name, value or XML documentation of deprecated constants.
+          - Always keep constants that are already marked [Obsolete] exactly as they are.
           - Keep the XML documentation comments, updating them only where needed.
           EOF
           )
@@ -168,6 +187,11 @@ jobs:
           set -euo pipefail
           : "${BERGET_GA_MODELID:?BERGET_GA_MODELID secret is required}"
 
+          CSPROJ="BergetSharp/BergetSharp.csproj"
+          OLD_VERSION="$(sed -n 's/.*<VersionPrefix>\([^<]*\)<\/VersionPrefix>.*/\1/p' "$CSPROJ" | head -n1)"
+          NEW_VERSION="$(printf '%s' "$OLD_VERSION" | awk -F. -v OFS=. '{ $2 = $2 + 1; $3 = 0; print }')"
+          echo "Bumping package version: $OLD_VERSION -> $NEW_VERSION"
+
           EXISTING="$(gh pr list --state open --json title,url | jq -r --arg t "$PR_TITLE" '.[] | select(.title == $t) | .html_url')"
           if [ -n "$EXISTING" ]; then
             echo "Open PR already exists, skipping: $EXISTING"
@@ -181,6 +205,10 @@ jobs:
           git checkout -b "$BRANCH"
           git add "$MODELS_FILE"
           git commit -m "$PR_TITLE"
+
+          sed -i "s#<VersionPrefix>[^<]*</VersionPrefix>#<VersionPrefix>$NEW_VERSION</VersionPrefix>#" "$CSPROJ"
+          git add "$CSPROJ"
+          git commit -m "chore: bump BergetSharp version to $NEW_VERSION"
           git push -u origin "$BRANCH"
 
           cat > pr_body.md <<EOF
@@ -189,8 +217,11 @@ jobs:
           ### Model IDs missing from Models.cs
           ${MISSING_LIST:-_none_}
 
-          ### Model IDs no longer present in /v1/models
+          ### Model IDs no longer present in /v1/models (marked [Obsolete], not removed)
           ${REMOVED_LIST:-_none_}
+
+          ### Package version
+          Bumped \`VersionPrefix\` from \`${OLD_VERSION}\` to \`${NEW_VERSION}\` (new model IDs are additive).
 
           Generated via Berget chat model \`${BERGET_GA_MODELID}\` and validated with \`dotnet build\`.
           EOF
@@ -204,4 +235,6 @@ jobs:
           {
             echo "### PR created"
             echo "$PR_URL"
+            echo ""
+            echo "Package version bumped: \`$OLD_VERSION\` -> \`$NEW_VERSION\`"
           } >> "$GITHUB_STEP_SUMMARY"
