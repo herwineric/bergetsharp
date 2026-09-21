@@ -24,9 +24,11 @@ jobs:
       - name: Verify tag exists
         env:
           TAG: ${{ inputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if ! git ls-remote --exit-code origin "refs/tags/$TAG" > /dev/null; then
+          if ! gh api "repos/{owner}/{repo}/git/ref/tags/$TAG" > /dev/null 2>&1; then
             echo "::error::Tag '$TAG' does not exist in the repository."
             exit 1
           fi
