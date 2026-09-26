@@ -37,6 +37,7 @@ public static class Models
         public const string KbWhisperLarge = "KBLab/kb-whisper-large";
         public const string NbWhisperLarge = "NbAiLab/nb-whisper-large";
         public const string FasterWhisperLargeV3 = "Systran/faster-whisper-large-v3";
+        public const string Pianissimo = "klang/pianissimo";
     }
 
     /// <summary>
@@ -45,5 +46,14 @@ public static class Models
     public static class Rerank
     {
         public const string BgeRerankerV2M3 = "BAAI/bge-reranker-v2-m3";
+    }
+
+    /// <summary>
+    /// System-one models.
+    /// </summary>
+    public static class SystemOne
+    {
+        public const string Qwen3_5_2B = "Qwen/Qwen3.5-2B";
+        public const string Laya = "convaiinnovations/laya";
     }
 }
