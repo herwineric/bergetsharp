@@ -1,12 +1,13 @@
 ﻿using System.ClientModel;
 using BergetSharp.Rerank;
+using BergetSharp.SystemOne;
 using OpenAI;
 
 namespace BergetSharp;
 
 /// <summary>
 /// OpenAI compatible Client for the Berget Inference API. There are subclients for each endpoint:
-/// chat completions, embeddings, transcriptions, rerank, and seat budgets.
+/// chat completions, embeddings, transcriptions, rerank, and system one.
 /// </summary>
 public class BergetClient : OpenAIClient
 {
@@ -44,5 +45,13 @@ public class BergetClient : OpenAIClient
     /// <param name="model"> The default model to use for rerank requests. </param>
     public virtual RerankClient GetRerankClient(string model)
         => new(Pipeline, model, _options);
-    
+
+    /// <summary>
+    /// Gets a new instance of the <see cref="SystemOneClient"/> class for the /v1/systemone endpoint,
+    /// sharing this client's pipeline and endpoint.
+    /// </summary>
+    /// <param name="model"> The default model to use for system one requests. </param>
+    public virtual SystemOneClient GetSystemOneClient(string model)
+        => new(Pipeline, model, _options);
+
 }

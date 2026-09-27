@@ -22,7 +22,8 @@ Unofficial .NET client for the Berget.AI inference API. Two projects in the solu
 ## Architecture conventions
 
 - `BergetClient` extends the official `OpenAIClient` (OpenAI 2.x package), so chat/embeddings/etc. come for free; the default endpoint is overridden to `https://api.berget.ai/v1`.
-- Endpoint-specific sub-clients (e.g. `Rerank/RerankClient` for `/v1/rerank`) are built on `System.ClientModel.Primitives`: `ClientPipeline`, `PipelineMessage`, `ClientResult<T>`, and protocol-method overloads taking `BinaryContent`/`RequestOptions`. Follow the existing client's shape when adding a new endpoint, and share the parent pipeline via the internal constructor (see `BergetClient.GetRerankClient`).
+- Endpoint-specific sub-clients (`Rerank/RerankClient` for `/v1/rerank`, `SystemOne/SystemOneClient` for `/v1/systemone`) are built on `System.ClientModel.Primitives`: `ClientPipeline`, `PipelineMessage`, `ClientResult<T>`, and protocol-method overloads taking `BinaryContent`/`RequestOptions`. Follow the existing client's shape when adding a new endpoint, and share the parent pipeline via the internal constructor (see `BergetClient.GetRerankClient`).
+- `SystemOneClient` validates its input models client-side (`SystemOneRequest.Validate()` per the endpoint's documented limits) before sending; keep validation rules in sync with the API docs.
 - Auth is an `Authorization: Bearer` header via `ApiKeyAuthenticationPolicy`; message classification accepts only 200 (`PipelineMessageClassifier200`).
 - Internal transport plumbing (response serialization, exception extraction, URI building) lives in `BergetSharp/Internal` — reuse `JsonUtilities`/`ClientPipelineExtensions` instead of duplicating.
 

@@ -12,7 +12,7 @@
         <Authors>herwineric</Authors>
         <Company>herwineric</Company>
         <Copyright>Copyright © herwineric</Copyright>
-        <Description>An unofficial .NET client for the Berget.AI inference API. Built on the official OpenAI .NET SDK, with support for chat, embeddings, audio and rerank.</Description>
+        <Description>An unofficial .NET client for the Berget.AI inference API. Built on the official OpenAI .NET SDK, with support for chat, embeddings, audio, rerank and system one.</Description>
         <Summary>An unofficial .NET client for the Berget.AI inference API.</Summary>
         <PackageTags>berget;berget.ai;openai;llm;chat;embeddings;rerank;ai;inference</PackageTags>
         <PackageReleaseNotes>Initial release: chat, embeddings, audio transcription and rerank support against https://api.berget.ai/v1.</PackageReleaseNotes>
