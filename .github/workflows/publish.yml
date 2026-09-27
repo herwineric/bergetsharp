@@ -25,6 +25,8 @@ jobs:
           CSPROJ: BergetSharp/BergetSharp.csproj
         run: |
           set -euo pipefail
+          git config user.name "github-actions[bot]"                    
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           VERSION=$(grep -oP '(?<=<VersionPrefix>)[^<]+' "$CSPROJ")
           if [ -z "$VERSION" ]; then
             echo "::error::Could not read <VersionPrefix> from $CSPROJ."
