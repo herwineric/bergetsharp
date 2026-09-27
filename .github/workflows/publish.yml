@@ -2,11 +2,6 @@ name: publish
 
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Git tag to publish (e.g. v1.2.3)'
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -16,27 +11,40 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write # required for Trusted Publishing (OIDC -> temp NuGet API key)
-      contents: write # required to create the GitHub release
+      contents: write # required to create the tag and the GitHub release
     env:
       BERGET_API_KEY: ${{ secrets.BERGET_API_KEY }}
       BERGET_GA_MODELID: ${{ secrets.BERGET_GA_MODELID }}
     steps:
-      - name: Verify tag exists
-        env:
-          TAG: ${{ inputs.tag }}
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          if ! gh api "repos/{owner}/{repo}/git/ref/tags/$TAG" > /dev/null 2>&1; then
-            echo "::error::Tag '$TAG' does not exist in the repository."
-            exit 1
-          fi
-
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ inputs.tag }}
           fetch-depth: 0 # full history required to collect the commits included in the tag
+
+      - name: Determine version from csproj
+        env:
+          CSPROJ: BergetSharp/BergetSharp.csproj
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -oP '(?<=<VersionPrefix>)[^<]+' "$CSPROJ")
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not read <VersionPrefix> from $CSPROJ."
+            exit 1
+          fi
+          TAG="v$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          echo "Publishing $TAG from commit $(git rev-parse --short HEAD)"
+
+      - name: Tag latest commit
+        run: |
+          set -euo pipefail
+          if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+            COMMIT=$(git rev-parse --short "$TAG^{commit}")
+            echo "::error::Tag '$TAG' already exists (on commit $COMMIT). Bump <VersionPrefix> in BergetSharp.csproj to publish a new version."
+            exit 1
+          fi
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6.0.0
@@ -50,19 +58,15 @@ jobs:
         run: dotnet pack BergetSharp/BergetSharp.csproj -c Release -o artifacts --no-build --no-restore -p:ContinuousIntegrationBuild=true
 
       - name: Verify package version matches tag
-        env:
-          TAG: ${{ inputs.tag }}
         run: |
-          TAG_VERSION="${TAG#v}"
+          set -euo pipefail
           PKG_VERSION=$(ls artifacts/BergetSharp.*.nupkg | head -n1 | sed 's/.*BergetSharp\.\(.*\)\.nupkg/\1/')
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::Tag version ($TAG_VERSION) does not match package version ($PKG_VERSION). Update VersionPrefix in BergetSharp.csproj."
+          if [ "$VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::VersionPrefix ($VERSION) does not match package version ($PKG_VERSION)."
             exit 1
           fi
 
       - name: Collect commits included in the tag
-        env:
-          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
@@ -94,8 +98,6 @@ jobs:
           dotnet nuget push artifacts/*.snupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
 
       - name: Generate release notes via Berget chat
-        env:
-          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           : "${BERGET_API_KEY:?BERGET_API_KEY secret is required}"
@@ -140,7 +142,6 @@ jobs:
       - name: Create or update GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
         run: |
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release edit "$TAG" --notes-file release-notes.md
