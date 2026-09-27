@@ -113,6 +113,8 @@ jobs:
           - Start with a short summary paragraph (2-3 sentences) describing the release at a high level.
           - Follow with a bulletpoint list of what has been done, one bullet per change, referencing the short commit SHA of the commit(s) each bullet covers, e.g. "- Add rerank client (bfda3ff)".
           - Base the notes ONLY on the given commits; do not invent changes.
+          - Only include commits relevant to the code (client library, tests, build/packaging, CI behavior). Skip documentation-only commits (e.g. README, AGENTS.md, doc comments) and other commits with no impact on the published code.
+          - If a commit in the list is documentation-only, omit it entirely rather than mentioning it.
           - Output ONLY the markdown, no code fences and no explanations.
           EOF
           )
