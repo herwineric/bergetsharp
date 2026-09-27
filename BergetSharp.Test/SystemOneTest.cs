@@ -14,7 +14,7 @@ public class SystemOneTest
     {
         // The validation tests never reach the transport, so a placeholder key is fine when
         // BERGET_API_KEY is not set; the integration test still requires a real key.
-        var credentials = new ApiKeyCredential(Environment.GetEnvironmentVariable("BERGET_API_KEY") ?? "sk_ber_FdgxRPSS1ND8q058oJHdbpkVyUquasWAmrOKnr_a8a7a1afb72e02f4");
+        var credentials = new ApiKeyCredential(Environment.GetEnvironmentVariable("BERGET_API_KEY") ?? "test-key");
         var options = new OpenAIClientOptions { Endpoint = new Uri("https://api.berget.ai/v1") };
 
         return new BergetClient(credentials, options).GetSystemOneClient(Models.SystemOne.Qwen3_5_2B);
