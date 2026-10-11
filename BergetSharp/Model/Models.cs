@@ -55,5 +55,6 @@ public static class Models
     {
         public const string Qwen3_5_2B = "Qwen/Qwen3.5-2B";
         public const string Laya = "convaiinnovations/laya";
+        public const string ClefFlash = "Cloudflare/clef-flash";
     }
 }
